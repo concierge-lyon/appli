@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sélection du Concierge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #0f1f3d;
+      --blue: #1a56a0;
+      --sky: #3b82f6;
+      --gold: #c9a84c;
+      --cream: #f8f6f1;
+      --white: #ffffff;
+      --gray: #6b7280;
+      --light: #e8edf5;
+      --shadow: 0 4px 24px rgba(15,31,61,0.13);
+      --radius: 14px;
+    }
+
+    html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--cream); }
+
+    /* ===== HEADER ===== */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: var(--navy);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+      height: 60px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+    }
+    #header .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    #header .logo-icon {
+      width: 32px; height: 32px;
+      background: var(--gold);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    #header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      color: var(--white);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    #header .subtitle {
+      font-size: 11px;
+      color: var(--gold);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 300;
+    }
+
+    /* ===== FILTER BAR ===== */
+    #filters {
+      position: fixed; top: 60px; left: 0; right: 0; z-index: 999;
+      background: var(--white);
+      border-bottom: 1px solid var(--light);
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      box-shadow: 0 2px 10px rgba(15,31,61,0.07);
+    }
+    #filters::-webkit-scrollbar { display: none; }
+
+    .filter-btn {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 16px;
+      border-radius: 30px;
+      border: 1.5px solid transparent;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      background: var(--light);
+      color: var(--navy);
+    }
+    .filter-btn .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .filter-btn.active { color: var(--white); }
+    .filter-btn[data-cat="tous"].active { background: var(--navy); border-color: var(--navy); }
+    .filter-btn[data-cat="culture"].active { background: #1a56a0; border-color: #1a56a0; }
+    .filter-btn[data-cat="patrimoine"].active { background: #166534; border-color: #166534; }
+    .filter-btn[data-cat="etoiles"].active { background: #b8860b; border-color: #b8860b; }
+    .filter-btn[data-cat="restaurants"].active { background: #991b1b; border-color: #991b1b; }
+    .filter-btn[data-cat="halles"].active { background: #0ea5e9; border-color: #0ea5e9; }
+    .filter-btn[data-cat="transports"].active { background: #374151; border-color: #374151; }
+    .filter-btn:not(.active):hover { border-color: var(--navy); }
+
+    /* ===== MAP ===== */
+    #map {
+      position: fixed;
+      top: 108px; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+    }
+
+    /* ===== POPUP ===== */
+    .leaflet-popup-content-wrapper {
+      border-radius: var(--radius) !important;
+      box-shadow: var(--shadow) !important;
+      padding: 0 !important;
+      overflow: hidden;
+      border: none !important;
+      min-width: 240px;
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      width: auto !important;
+    }
+    .leaflet-popup-tip-container { margin-top: -1px; }
+
+    .popup-inner {
+      font-family: 'DM Sans', sans-serif;
+    }
+    .popup-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--light);
+    }
+    .popup-category {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .popup-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--navy);
+      line-height: 1.3;
+    }
+    .popup-body {
+      padding: 10px 16px 14px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .popup-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 12.5px; color: var(--gray);
+      line-height: 1.5;
+    }
+    .popup-row svg { flex-shrink: 0; margin-top: 2px; }
+    .popup-note {
+      font-size: 12px;
+      color: var(--navy);
+      font-style: italic;
+      background: var(--light);
+      border-left: 3px solid var(--gold);
+      padding: 7px 10px;
+      border-radius: 0 6px 6px 0;
+      margin-top: 4px;
+    }
+
+    /* ===== MY LOCATION ===== */
+    .my-location-marker {
+      width: 18px; height: 18px;
+      background: var(--sky);
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+    }
+
+    /* ===== LEGEND ===== */
+    #legend {
+      position: fixed;
+      bottom: 20px; right: 16px;
+      z-index: 999;
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--navy);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .legend-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray);
+      margin-bottom: 2px;
+    }
+    .legend-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .legend-dot {
+      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ===== USER LOCATION BTN ===== */
+    #geoBtn {
+      position: fixed;
+      bottom: 20px; left: 16px;
+      z-index: 999;
+      background: var(--navy);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 46px; height: 46px;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    #geoBtn:hover { background: var(--blue); }
+
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">
+    <div class="logo-icon">🗺️</div>
+    <div>
+      <h1>Sélection du Concierge</h1>
+    </div>
+  </div>
+</div>
+
+<!-- FILTRES -->
+<div id="filters">
+  <button class="filter-btn active" data-cat="tous"><span>✦</span> Tout afficher</button>
+  <button class="filter-btn" data-cat="culture"><span class="dot" style="background:#1a56a0"></span> Culture & Musées</button>
+  <button class="filter-btn" data-cat="patrimoine"><span class="dot" style="background:#166534"></span> Traboules & Patrimoine</button>
+  <button class="filter-btn" data-cat="etoiles"><span class="dot" style="background:#b8860b"></span> ⭐ Étoilés Michelin</button>
+  <button class="filter-btn" data-cat="restaurants"><span class="dot" style="background:#991b1b"></span> 🍽️ Restaurants</button>
+  <button class="filter-btn" data-cat="halles"><span class="dot" style="background:#0ea5e9"></span> 🏛️ Halles Paul Bocuse</button>
+  <button class="filter-btn" data-cat="transports"><span class="dot" style="background:#374151"></span> 🚇 Transports</button>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- BOUTON GÉOLOCALISATION -->
+<button id="geoBtn" title="Ma position">📍</button>
+
+<!-- LÉGENDE -->
+<div id="legend">
+  <div class="legend-title">Légende</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#1a56a0"></div> Culture & Musées</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#166534"></div> Traboules & Patrimoine</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#b8860b"></div> ⭐ Étoilés Michelin</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#991b1b"></div> 🍽️ Restaurants</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#0ea5e9"></div> 🏛️ Halles Paul Bocuse</div>
+  <div class="legend-row"><div class="legend-dot" style="background:#374151"></div> 🚇 Métro & Gares</div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+
+// =====================
+// CARTE
+// =====================
+var map = L.map('map', { zoomControl: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+// =====================
+// ICÔNES
+// =====================
+function makeIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:14px;height:14px;
+      background:${color};
+      border:2.5px solid white;
+      border-radius:50%;
+      box-shadow:0 2px 8px rgba(0,0,0,0.3);
+    "></div>`,
+    iconSize: [14,14],
+    iconAnchor: [7,7],
+    popupAnchor: [0,-10]
+  });
+}
+
+var iconCulture    = makeIcon('#1a56a0');
+var iconPatrimoine = makeIcon('#166534');
+var iconEtoiles    = makeIcon('#b8860b');
+var iconRestaurants = makeIcon('#991b1b');
+var iconHalles     = makeIcon('#0ea5e9');
+
+function makeMetroIcon(color, letter) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:18px;height:18px;
+      background:${color};
+      border:2px solid white;
+      border-radius:4px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.3);
+      display:flex;align-items:center;justify-content:center;
+      font-size:9px;font-weight:700;color:white;
+      font-family:sans-serif;
+    ">${letter}</div>`,
+    iconSize: [18,18],
+    iconAnchor: [9,9],
+    popupAnchor: [0,-12]
+  });
+}
+
+function makeGareIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:20px;height:20px;
+      background:#1f2937;
+      border:2px solid white;
+      border-radius:50%;
+      box-shadow:0 2px 8px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;color:white;
+    ">🚆</div>`,
+    iconSize: [20,20],
+    iconAnchor: [10,10],
+    popupAnchor: [0,-12]
+  });
+}
+
+var iconMetroA = makeMetroIcon('#e63946','A');
+var iconMetroB = makeMetroIcon('#457b9d','B');
+var iconMetroC = makeMetroIcon('#f4a261','C');
+var iconMetroD = makeMetroIcon('#2a9d8f','D');
+var iconGare   = makeGareIcon();
+
+var dataTransports = [
+  // === GARES ===
+  { coords:[45.7495,4.8275], nom:"Gare de Lyon-Perrache", cat:"Transport", type:"Gare SNCF — Lignes TGV, TER, Intercités", adresse:"Place Carnot, 69002 Lyon", note:"Terminus de la ligne A du métro. Connexion Rhônexpress pour l'aéroport St-Exupéry.", icone: iconGare },
+  { coords:[45.7604,4.8598], nom:"Gare de Lyon-Part-Dieu", cat:"Transport", type:"Gare SNCF — Lignes TGV, TER, Intercités", adresse:"5 Place Charles Béraudier, 69003 Lyon", note:"Principale gare TGV de Lyon. Accès direct métro B et D, et Rhônexpress aéroport.", icone: iconGare },
+
+  // === LIGNE A (rouge) ===
+  { coords:[45.7495,4.8275], nom:"Perrache — Métro A", cat:"Transport", type:"Ligne A", adresse:"Place Carnot, 69002 Lyon", icone: iconMetroA },
+  { coords:[45.7498,4.8298], nom:"Ampère — Victor Hugo — Métro A", cat:"Transport", type:"Ligne A", adresse:"Place Ampère, 69002 Lyon", icone: iconMetroA },
+  { coords:[45.7578,4.8323], nom:"Bellecour — Métro A & D", cat:"Transport", type:"Ligne A & D (correspondance)", adresse:"Place Bellecour, 69002 Lyon", note:"Correspondance lignes A et D. Cœur de la Presqu'île.", icone: iconMetroA },
+  { coords:[45.7621,4.8336], nom:"Cordeliers — Métro A", cat:"Transport", type:"Ligne A", adresse:"Place des Cordeliers, 69002 Lyon", icone: iconMetroA },
+  { coords:[45.7677,4.8340], nom:"Hôtel de Ville — Louis Pradel — Métro A & C", cat:"Transport", type:"Ligne A & C (correspondance)", adresse:"Place de la Comédie, 69001 Lyon", note:"Correspondance lignes A et C. Face à l'Opéra.", icone: iconMetroA },
+  { coords:[45.7697,4.8370], nom:"Foch — Métro A", cat:"Transport", type:"Ligne A", adresse:"Avenue Foch, 69006 Lyon", icone: iconMetroA },
+  { coords:[45.7712,4.8408], nom:"Masséna — Métro A", cat:"Transport", type:"Ligne A", adresse:"Cours Franklin Roosevelt, 69006 Lyon", icone: iconMetroA },
+  { coords:[45.7718,4.8468], nom:"Charpennes — Charles Hérnu — Métro A & B", cat:"Transport", type:"Ligne A & B (correspondance)", adresse:"Cours Émile Zola, 69100 Villeurbanne", note:"Grande correspondance A et B à Villeurbanne.", icone: iconMetroA },
+  { coords:[45.7704,4.8553], nom:"République — Villeurbanne — Métro A", cat:"Transport", type:"Ligne A", adresse:"Cours Émile Zola, 69100 Villeurbanne", icone: iconMetroA },
+  { coords:[45.7688,4.8626], nom:"Gratte-Ciel — Métro A", cat:"Transport", type:"Ligne A", adresse:"Cours Henri Barbusse, 69100 Villeurbanne", icone: iconMetroA },
+  { coords:[45.7683,4.8700], nom:"Laurent Bonnevay — Métro A", cat:"Transport", type:"Ligne A", adresse:"Boulevard Laurent Bonnevay, 69100 Villeurbanne", icone: iconMetroA },
+  { coords:[45.7696,4.8809], nom:"Vaulx-en-Velin — La Soie — Métro A", cat:"Transport", type:"Ligne A — Terminus Est", adresse:"Avenue de la Soie, 69120 Vaulx-en-Velin", icone: iconMetroA },
+
+  // === LIGNE B (bleu) ===
+  { coords:[45.7718,4.8468], nom:"Charpennes — Métro B", cat:"Transport", type:"Ligne B", adresse:"Cours Émile Zola, 69100 Villeurbanne", icone: iconMetroB },
+  { coords:[45.7678,4.8467], nom:"Part-Dieu — Métro B & D", cat:"Transport", type:"Ligne B & D (correspondance)", adresse:"Rue Garibaldi, 69003 Lyon", note:"Accès direct à la gare Part-Dieu et au centre commercial.", icone: iconMetroB },
+  { coords:[45.7636,4.8470], nom:"Saxe — Gambetta — Métro B & D", cat:"Transport", type:"Ligne B & D (correspondance)", adresse:"Place du Général Brosset, 69003 Lyon", icone: iconMetroB },
+  { coords:[45.7578,4.8323], nom:"Bellecour — Métro B", cat:"Transport", type:"Ligne B", adresse:"Place Bellecour, 69002 Lyon", icone: iconMetroB },
+  { coords:[45.7540,4.8305], nom:"Minimes — Louis Pradel — Métro B", cat:"Transport", type:"Ligne B", adresse:"Rue des Minimes, 69002 Lyon", icone: iconMetroB },
+  { coords:[45.7495,4.8275], nom:"Perrache — Métro B", cat:"Transport", type:"Ligne B", adresse:"Place Carnot, 69002 Lyon", icone: iconMetroB },
+  { coords:[45.7413,4.8258], nom:"Confluence — Métro B", cat:"Transport", type:"Ligne B — Terminus Sud", adresse:"Rue Casimir Périer, 69002 Lyon", note:"Accès direct au Musée des Confluences.", icone: iconMetroB },
+
+  // === LIGNE C (orange) ===
+  { coords:[45.7677,4.8340], nom:"Hôtel de Ville — Métro C", cat:"Transport", type:"Ligne C", adresse:"Place de la Comédie, 69001 Lyon", icone: iconMetroC },
+  { coords:[45.7683,4.8310], nom:"Croix-Paquet — Métro C", cat:"Transport", type:"Ligne C", adresse:"Place Croix-Paquet, 69001 Lyon", note:"Début de la section à crémaillère. Entrée des pentes de la Croix-Rousse.", icone: iconMetroC },
+  { coords:[45.7726,4.8296], nom:"Croix-Rousse — Métro C", cat:"Transport", type:"Ligne C", adresse:"Boulevard de la Croix-Rousse, 69004 Lyon", icone: iconMetroC },
+  { coords:[45.7770,4.8295], nom:"Hénon — Métro C", cat:"Transport", type:"Ligne C", adresse:"Rue Hénon, 69004 Lyon", icone: iconMetroC },
+  { coords:[45.7840,4.8305], nom:"Cuire — Métro C", cat:"Transport", type:"Ligne C — Terminus Nord", adresse:"Avenue des Canuts, 69300 Caluire-et-Cuire", icone: iconMetroC },
+
+  // === LIGNE D (vert) ===
+  { coords:[45.7728,4.8066], nom:"Gare de Vaise — Métro D", cat:"Transport", type:"Ligne D — Terminus Nord-Ouest", adresse:"Rue du Docteur Horand, 69009 Lyon", icone: iconMetroD },
+  { coords:[45.7707,4.8130], nom:"Valmy — Métro D", cat:"Transport", type:"Ligne D", adresse:"Rue Valmy, 69009 Lyon", icone: iconMetroD },
+  { coords:[45.7678,4.8202], nom:"Gorge de Loup — Métro D", cat:"Transport", type:"Ligne D", adresse:"Avenue du 11 Novembre 1918, 69009 Lyon", icone: iconMetroD },
+  { coords:[45.7651,4.8259], nom:"Fourvière — Métro D", cat:"Transport", type:"Ligne D", adresse:"Tunnel de Fourvière, 69005 Lyon", note:"Sous la colline de Fourvière. Sortie idéale pour le Vieux-Lyon.", icone: iconMetroD },
+  { coords:[45.7616,4.8286], nom:"Vieux Lyon — Cathédrale Saint-Jean — Métro D", cat:"Transport", type:"Ligne D", adresse:"Avenue Adolphe Max, 69005 Lyon", note:"La station incontournable pour le Vieux-Lyon, les traboules et la Cathédrale.", icone: iconMetroD },
+  { coords:[45.7578,4.8323], nom:"Bellecour — Métro D", cat:"Transport", type:"Ligne D", adresse:"Place Bellecour, 69002 Lyon", icone: iconMetroD },
+  { coords:[45.7540,4.8305], nom:"Guillotière — Métro D", cat:"Transport", type:"Ligne D", adresse:"Place Gabriel Péri, 69007 Lyon", icone: iconMetroD },
+  { coords:[45.7497,4.8361], nom:"Jean Macé — Métro D", cat:"Transport", type:"Ligne D", adresse:"Place Jean Macé, 69007 Lyon", icone: iconMetroD },
+  { coords:[45.7462,4.8406], nom:"Monplaisir — Lumière — Métro D", cat:"Transport", type:"Ligne D", adresse:"Avenue des Frères Lumière, 69008 Lyon", note:"Proche de l'Institut Lumière.", icone: iconMetroD },
+  { coords:[45.7416,4.8450], nom:"Grange Blanche — Métro D", cat:"Transport", type:"Ligne D", adresse:"Avenue Rockefeller, 69008 Lyon", icone: iconMetroD },
+  { coords:[45.7372,4.8493], nom:"Laënnec — Métro D", cat:"Transport", type:"Ligne D", adresse:"Rue Laënnec, 69008 Lyon", icone: iconMetroD },
+  { coords:[45.7331,4.8530], nom:"Mermoz — Pinel — Métro D", cat:"Transport", type:"Ligne D", adresse:"Avenue Jean Mermoz, 69008 Lyon", icone: iconMetroD },
+  { coords:[45.7270,4.8559], nom:"Parilly — Métro D", cat:"Transport", type:"Ligne D", adresse:"Boulevard des États-Unis, 69008 Lyon", icone: iconMetroD },
+  { coords:[45.7193,4.8604], nom:"Gare de Vénissieux — Métro D", cat:"Transport", type:"Ligne D — Terminus Sud-Est", adresse:"Avenue Marcel Houël, 69200 Vénissieux", icone: iconMetroD },
+];
+
+// =====================
+// POPUP BUILDER
+// =====================
+function ico(d) {
+  const icons = {
+    adresse: `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
+    tel: `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.03 1.19 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>`,
+    info: `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    horaires: `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+  };
+  return icons[d] || '';
+}
+
+function buildPopup(o) {
+  const catColors = { 'Culture': '#1a56a0', 'Patrimoine': '#166534', 'Étoilé': '#b8860b', 'Bib Gourmand': '#991b1b', 'Bouchon': '#991b1b', 'Bocuse': '#991b1b', 'Transport': '#374151' };
+  const color = catColors[o.cat] || '#333';
+  let html = `<div class="popup-inner">
+    <div class="popup-header">
+      <div class="popup-category" style="color:${color}">${o.cat}</div>
+      <div class="popup-name">${o.nom}</div>
+    </div>
+    <div class="popup-body">`;
+  if (o.adresse) html += `<div class="popup-row">${ico('adresse')}<span>${o.adresse}</span></div>`;
+  if (o.tel)     html += `<div class="popup-row">${ico('tel')}<span>${o.tel}</span></div>`;
+  if (o.horaires)html += `<div class="popup-row">${ico('horaires')}<span>${o.horaires}</span></div>`;
+  if (o.type)    html += `<div class="popup-row">${ico('info')}<span>${o.type}</span></div>`;
+  if (o.note)    html += `<div class="popup-note">💬 ${o.note}</div>`;
+  html += `</div></div>`;
+  return html;
+}
+
+// =====================
+// DONNÉES
+// =====================
+
+var dataCulture = [
+
+  // === MUSÉES MUNICIPAUX (Ville de Lyon) ===
+  { coords:[45.7679,4.8338], nom:"Musée des Beaux-Arts de Lyon", cat:"Culture", adresse:"20 Place des Terreaux, 69001 Lyon", tel:"04 72 10 17 40", horaires:"Mer–Lun 10h–18h, Ven 10h30–18h (fermé mar)", note:"L'un des plus grands musées d'Europe. Rembrandt, Monet, Picasso, Gauguin… Chef-d'œuvre absolu." },
+  { coords:[45.7628,4.8266], nom:"Musée Gadagne — Histoire de Lyon & Marionnettes", cat:"Culture", adresse:"1 Place du Petit Collège, 69005 Lyon", tel:"04 72 11 13 00", horaires:"Mer–Dim 11h–18h30 (fermé lun-mar)", note:"Le plus grand bâtiment Renaissance de Lyon. Deux musées en un : histoire de la ville et art de la marionnette." },
+  { coords:[45.7843,4.8523], nom:"Musée d'Art Contemporain (MAC)", cat:"Culture", adresse:"81 Quai Charles de Gaulle, 69006 Lyon", tel:"04 72 69 17 17", horaires:"Ouvert uniquement en période d'exposition (mer–dim 11h–18h)", note:"Conçu par Renzo Piano. Expositions temporaires ambitieuses d'artistes contemporains internationaux." },
+  { coords:[45.7574,4.8316], nom:"Musée de l'Imprimerie et de la Communication Graphique", cat:"Culture", adresse:"13 Rue de la Poulaillerie, 69002 Lyon", tel:"04 78 37 65 98", horaires:"Fermé pour travaux jusqu'au printemps 2027", note:"Situé dans un hôtel Renaissance du 15e s. Retrace l'histoire de l'imprimerie depuis Gutenberg. Réouverture prévue printemps 2027." },
+  { coords:[45.7390,4.8220], nom:"Centre d'Histoire de la Résistance et de la Déportation (CHRD)", cat:"Culture", adresse:"14 Avenue Berthelot, 69007 Lyon", tel:"04 78 72 23 11", horaires:"Mer–Dim 10h–18h (fermé lun-mar)", note:"Installé dans l'ancienne école de Santé Militaire où Klaus Barbie a sévi. Lieu de mémoire exceptionnel." },
+
+  // === MUSÉES ET INSTITUTIONS PARTENAIRES ===
+  { coords:[45.7338,4.8150], nom:"Musée des Confluences", cat:"Culture", adresse:"86 Quai Perrache, 69002 Lyon", tel:"04 28 38 12 34", horaires:"Mar–Ven 11h–19h, Sam–Dim 10h–20h (fermé lun)", note:"Architecture futuriste spectaculaire. Le musée le plus visité de Lyon : sciences, nature, humanités." },
+  { coords:[45.7565,4.8505], nom:"Institut Lumière — Musée du Cinéma", cat:"Culture", adresse:"25 Rue du Premier Film, 69008 Lyon", tel:"04 78 78 18 95", horaires:"Mar–Dim 10h–18h30", note:"Dans la villa familiale des frères Lumière. Berceau du cinéma mondial. Ne pas manquer le Hangar du Premier Film !" },
+  { coords:[45.7635,4.8262], nom:"Musée Miniature et Cinéma", cat:"Culture", adresse:"60 Rue Saint-Jean, 69005 Lyon", tel:"04 72 00 24 77", horaires:"Lun–Ven 10h–18h30, Sam–Dim 10h–19h", note:"Miniatures hyperréalistes et décors de cinéma dans un bel immeuble Renaissance du Vieux-Lyon." },
+  { coords:[45.7298,4.8270], nom:"Lugdunum — Musée et Théâtres Romains", cat:"Culture", adresse:"17 Rue Cléberg, 69005 Lyon", tel:"04 72 38 49 30", horaires:"Mar–Dim 11h–18h (fermé lun)", note:"Enfoui dans la colline de Fourvière, juste entre le Grand Théâtre et l'Odéon romains. Mosaïques et sculptures gallo-romaines." },
+  { coords:[45.7682,4.8308], nom:"Musée des Canuts", cat:"Culture", adresse:"10-12 Rue d'Ivry, 69004 Lyon", tel:"04 78 28 62 04", horaires:"Mar–Sam 10h–18h (fermé dim-lun)", note:"Au cœur de la Croix-Rousse, l'histoire des Canuts et les métiers à tisser en fonctionnement. Unique." },
+  { coords:[45.7671,4.8241], nom:"Soierie Vivante — Atelier de Passementerie", cat:"Culture", adresse:"21 Rue Richan, 69004 Lyon", tel:"04 78 27 17 13", horaires:"Mar–Sam : 14h et 16h (toute l'année)", note:"Siège de l'association. Métiers à tisser ruban or, argent et soie en fonctionnement depuis plus d'un siècle. Gratuit avec la Lyon City Card." },
+  { coords:[45.7666,4.8236], nom:"Soierie Vivante — Atelier de Tissage", cat:"Culture", adresse:"12bis Montée Justin Godart, 69004 Lyon", tel:"04 78 27 17 13", horaires:"Mar–Sam : 15h et 17h (toute l'année)", note:"Ancien atelier de la famille Ressicaud. Tissage Jacquard en fonctionnement dans un cadre familial du 19e s. À 550m de l'atelier de passementerie." },
+  { coords:[45.7580,4.8340], nom:"Musée de l'Illusion", cat:"Culture", adresse:"4 Rue Bellecordière, 69002 Lyon", tel:"04 37 24 00 20", horaires:"Lun–Mer & Dim 10h–20h, Jeu–Sam 10h–22h", note:"Grand-Hôtel-Dieu. Expérience immersive sur les illusions d'optique et le fonctionnement du cerveau." },
+  { coords:[45.7627,4.8268], nom:"Musée Gadagne — Trésor de la Cathédrale", cat:"Culture", adresse:"Place Saint-Jean, 69005 Lyon", tel:"04 78 92 82 29", horaires:"Mar–Sam 9h30–12h et 14h–18h (fermé lun)", note:"Dans la Cathédrale Saint-Jean. Objets liturgiques et reliques médiévales remarquables." },
+
+  // === SALLES DE SPECTACLE ===
+  { coords:[45.7674,4.8353], nom:"Opéra National de Lyon", cat:"Culture", adresse:"1 Place de la Comédie, 69001 Lyon", tel:"04 69 85 54 54", horaires:"Billetterie : Mar–Sam 12h–19h", note:"Réhabilité par Jean Nouvel en 1993, la coupole vitrée est iconique. Opéra, danse, concerts de haut niveau." },
+  { coords:[45.7489,4.8394], nom:"Auditorium — Orchestre National de Lyon", cat:"Culture", adresse:"149 Rue Garibaldi, 69003 Lyon", tel:"04 78 95 95 95", horaires:"Billetterie : Mar–Sam 12h–18h (selon concerts)", note:"Sa forme de coquille de béton est unique. 2100 places, acoustique de renommée mondiale. Orgue Cavaillé-Coll historique." },
+  { coords:[45.7553,4.8310], nom:"Les Célestins — Théâtre de Lyon", cat:"Culture", adresse:"4 Rue Charles Dullin, 69002 Lyon", tel:"04 72 77 40 00", horaires:"Billetterie : Mar–Sam 13h–19h", note:"Le plus beau théâtre à l'italienne de Lyon, classé Monument Historique. Programmation exigeante et populaire." },
+  { coords:[45.7715,4.8284], nom:"Théâtre de la Croix-Rousse", cat:"Culture", adresse:"1 Place Joannès Ambre, 69004 Lyon", tel:"04 72 07 49 49", horaires:"Billetterie : Mar–Sam 13h–18h30", note:"Ancienne filature des Canuts transformée en théâtre. Programmation contemporaine engagée, beau jardin en terrasse." },
+  { coords:[45.7454,4.8044], nom:"Théâtre du Point du Jour", cat:"Culture", adresse:"7 Rue des Aqueducs, 69005 Lyon", tel:"04 78 59 44 24", horaires:"Billetterie selon programme", note:"Scène labellisée, programmation théâtrale contemporaine et émancipatrice." },
+  { coords:[45.7379,4.7988], nom:"Maison de la Danse de Lyon", cat:"Culture", adresse:"8 Avenue Jean Mermoz, 69008 Lyon", tel:"04 72 78 18 18", horaires:"Billetterie : Mar–Sam 13h–18h", note:"Premier centre chorégraphique de France dédié à la danse. Toutes les formes de danse, du classique au contemporain." },
+  { coords:[45.7325,4.8245], nom:"Halle Tony Garnier", cat:"Culture", adresse:"20 Place des Pavillons, 69007 Lyon", tel:"04 72 76 85 85", horaires:"Selon événements", note:"Chef-d'œuvre d'architecture industrielle de Tony Garnier (1914), classée Monument Historique. Grande salle de spectacles et concerts." },
+  { coords:[45.7590,4.8560], nom:"Théâtre des Marronniers", cat:"Culture", adresse:"9 Rue des Marronniers, 69002 Lyon", tel:"04 78 37 47 46", horaires:"Selon programme", note:"Théâtre intime au cœur de la Presqu'île, connu pour ses créations et comédies." },
+];
+
+var dataPatrimoine = [
+
+  // === PENTES DE LA CROIX-ROUSSE (1er arr.) ===
+  { coords:[45.7680,4.8321], nom:"1 rue Ste-Marie des Terreaux / 6 rue des Capucins", cat:"Patrimoine", type:"Cour et Traboule", adresse:"1 Rue Sainte-Marie des Terreaux, 69001 Lyon" },
+  { coords:[45.7683,4.8316], nom:"3-5 rue des Capucins / 6 rue Leynaud", cat:"Patrimoine", type:"Cour et Traboule", adresse:"3 Rue des Capucins, 69001 Lyon" },
+  { coords:[45.7686,4.8313], nom:"13 rue des Capucins", cat:"Patrimoine", type:"Cour et Traboule (conventionnée en partie)", adresse:"13 Rue des Capucins, 69001 Lyon" },
+  { coords:[45.7676,4.8329], nom:"6 place des Terreaux / 12 rue Sainte-Catherine", cat:"Patrimoine", type:"Traboule (conventionnée en partie)", adresse:"6 Place des Terreaux, 69001 Lyon" },
+  { coords:[45.7693,4.8313], nom:"Passage Thiaffait — 19 rue Leynaud / 30 rue Burdeau", cat:"Patrimoine", type:"Traboule", adresse:"19 Rue Leynaud, 69001 Lyon", note:"Galerie de créateurs mode & design. Passage ouvert en permanence, très agréable." },
+  { coords:[45.7713,4.8310], nom:"20 rue Imbert Colomès / 55 rue des Tables Claudiennes", cat:"Patrimoine", type:"Cour et Traboule", adresse:"20 Rue Imbert Colomès, 69001 Lyon" },
+  { coords:[45.7719,4.8305], nom:"Cour des Voraces — 29 rue Imbert Colomès / 9 place Colbert / 14 montée Saint-Sébastien", cat:"Patrimoine", type:"Cour et Traboule", adresse:"29 Rue Imbert Colomès, 69001 Lyon", note:"Escalier monumental à 7 étages, symbole de la révolte des Canuts de 1848. À ne pas manquer !" },
+  { coords:[45.7675,4.8296], nom:"Cour du Moirage / 4-5 place Croix-Paquet", cat:"Patrimoine", type:"Cour et Traboule", adresse:"4 Place Croix-Paquet, 69001 Lyon" },
+  { coords:[45.7690,4.8307], nom:"5 rue Coustou / 22 rue des Capucins", cat:"Patrimoine", type:"Cour et Traboule", adresse:"5 Rue Coustou, 69001 Lyon" },
+  { coords:[45.7748,4.8270], nom:"118 montée de la Grande Côte / 7 rue Terme", cat:"Patrimoine", type:"Traboule", adresse:"118 Montée de la Grande Côte, 69001 Lyon" },
+  { coords:[45.7725,4.8340], nom:"4 rue de Thou / 5 Petite rue des Feuillants", cat:"Patrimoine", type:"Traboule (accès uniquement par le 5 petite rue des Feuillants)", adresse:"5 Petite Rue des Feuillants, 69001 Lyon" },
+  { coords:[45.7737,4.8320], nom:"22 rue Bouteille / rue Sergent Blandan", cat:"Patrimoine", type:"Traboule", adresse:"22 Rue Bouteille, 69001 Lyon" },
+  { coords:[45.7745,4.8350], nom:"2-4 rue des Pierres Plantées / rue Jean-Baptiste Say", cat:"Patrimoine", type:"Cour et Traboule", adresse:"2 Rue des Pierres Plantées, 69001 Lyon" },
+  { coords:[45.7747,4.8355], nom:"11 rue des Pierres Plantées — Venelle des Pierres Plantées", cat:"Patrimoine", type:"Traboule", adresse:"11 Rue des Pierres Plantées, 69001 Lyon" },
+  { coords:[45.7730,4.8390], nom:"5 rue Royale / 3 quai Lassagne", cat:"Patrimoine", type:"Traboule", adresse:"5 Rue Royale, 69001 Lyon", note:"Superbe escalier du 17e s. classé Monument Historique." },
+  { coords:[45.7728,4.8344], nom:"8 petite rue des Feuillants / 19 place Tolozan", cat:"Patrimoine", type:"Traboule", adresse:"8 Petite Rue des Feuillants, 69001 Lyon" },
+  { coords:[45.7722,4.8352], nom:"4 rue Désirée / 7 rue Puits Gaillot", cat:"Patrimoine", type:"Traboule", adresse:"4 Rue Désirée, 69001 Lyon" },
+  { coords:[45.7726,4.8346], nom:"9 petite rue des Feuillants / rue de Thou", cat:"Patrimoine", type:"Traboule", adresse:"9 Petite Rue des Feuillants, 69001 Lyon" },
+  { coords:[45.7734,4.8385], nom:"21 rue Royale / 11 quai Lassagne", cat:"Patrimoine", type:"Traboule", adresse:"21 Rue Royale, 69001 Lyon" },
+  { coords:[45.7737,4.8382], nom:"25-27 rue Royale / 13 quai Lassagne / 1 rue Violi", cat:"Patrimoine", type:"Traboule", adresse:"25 Rue Royale, 69001 Lyon" },
+  { coords:[45.7718,4.8318], nom:"12 rue Fernand Rey", cat:"Patrimoine", type:"Cour et Traboule", adresse:"12 Rue Fernand Rey, 69001 Lyon" },
+  { coords:[45.7696,4.8310], nom:"36 rue Burdeau", cat:"Patrimoine", type:"Cour ouverte", adresse:"36 Rue Burdeau, 69001 Lyon" },
+
+  // === PRESQU'ÎLE (2e arr.) ===
+  { coords:[45.7558,4.8322], nom:"9 rue Laurencin / Cour des Trois Passages", cat:"Patrimoine", type:"Traboule conventionnée", adresse:"9 Rue Laurencin, 69002 Lyon", note:"La seule traboule conventionnée de la Presqu'île. À recommander absolument." },
+
+  // === VIEUX-LYON (5e arr.) ===
+  { coords:[45.7631,4.8275], nom:"10 rue Lainerie", cat:"Patrimoine", type:"Cour", adresse:"10 Rue Lainerie, 69005 Lyon" },
+  { coords:[45.7636,4.8270], nom:"16 rue Juiverie", cat:"Patrimoine", type:"Cour", adresse:"16 Rue Juiverie, 69005 Lyon" },
+  { coords:[45.7621,4.8264], nom:"10 rue Mourguet", cat:"Patrimoine", type:"Cour", adresse:"10 Rue Mourguet, 69005 Lyon" },
+  { coords:[45.7628,4.8278], nom:"3 place du Change", cat:"Patrimoine", type:"Cour", adresse:"3 Place du Change, 69005 Lyon" },
+  { coords:[45.7598,4.8275], nom:"32 rue du Doyenné", cat:"Patrimoine", type:"Cour", adresse:"32 Rue du Doyenné, 69005 Lyon" },
+  { coords:[45.7607,4.8274], nom:"58 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"58 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7615,4.8271], nom:"Grande Traboule — 27 rue du Bœuf / 54 rue Saint-Jean", cat:"Patrimoine", type:"Cour et Traboule", adresse:"54 Rue Saint-Jean, 69005 Lyon", note:"La plus célèbre de Lyon ! Traverse 4 cours et 3 immeubles. Incontournable." },
+  { coords:[45.7611,4.8268], nom:"21 rue du Bœuf", cat:"Patrimoine", type:"Cour", adresse:"21 Rue du Bœuf, 69005 Lyon" },
+  { coords:[45.7609,4.8272], nom:"50 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"50 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7614,4.8270], nom:"42 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"42 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7619,4.8269], nom:"26-28 rue Saint-Jean", cat:"Patrimoine", type:"Cour (fermée suite à sinistre — réouverture après 2025)", adresse:"26 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7622,4.8267], nom:"27 rue Saint-Jean / 6 rue des Trois-Maries", cat:"Patrimoine", type:"Cour et Traboule", adresse:"27 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7625,4.8266], nom:"18 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"18 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7629,4.8272], nom:"2 place du Gouvernement", cat:"Patrimoine", type:"Cour (seule la cour côté rue du Gouvernement est conventionnée)", adresse:"2 Place du Gouvernement, 69005 Lyon" },
+  { coords:[45.7640,4.8279], nom:"26 quai de Bondy", cat:"Patrimoine", type:"Cour", adresse:"26 Quai de Bondy, 69005 Lyon" },
+  { coords:[45.7634,4.8268], nom:"8 rue Juiverie", cat:"Patrimoine", type:"Cour", adresse:"8 Rue Juiverie, 69005 Lyon" },
+  { coords:[45.7603,4.8273], nom:"33 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"33 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7577,4.8265], nom:"42 Montée Saint-Barthélemy", cat:"Patrimoine", type:"Cour", adresse:"42 Montée Saint-Barthélemy, 69005 Lyon" },
+  { coords:[45.7591,4.8269], nom:"7 rue Saint-Georges", cat:"Patrimoine", type:"Cour", adresse:"7 Rue Saint-Georges, 69005 Lyon" },
+  { coords:[45.7633,4.8269], nom:"10 rue Juiverie", cat:"Patrimoine", type:"Cour", adresse:"10 Rue Juiverie, 69005 Lyon" },
+  { coords:[45.7637,4.8271], nom:"4-5 place du Change", cat:"Patrimoine", type:"2 cours", adresse:"4 Place du Change, 69005 Lyon" },
+  { coords:[45.7606,4.8272], nom:"40 rue Saint-Jean", cat:"Patrimoine", type:"Traboule", adresse:"40 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7620,4.8266], nom:"9 rue des 3 Maries", cat:"Patrimoine", type:"Cour (seule la cour côté rue des 3 Maries est conventionnée)", adresse:"9 Rue des Trois-Maries, 69005 Lyon" },
+  { coords:[45.7627,4.8265], nom:"12 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"12 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7593,4.8268], nom:"10-12 rue Saint-Georges", cat:"Patrimoine", type:"Cour", adresse:"10 Rue Saint-Georges, 69005 Lyon" },
+  { coords:[45.7630,4.8264], nom:"4 rue Saint-Jean", cat:"Patrimoine", type:"Cour", adresse:"4 Rue Saint-Jean, 69005 Lyon" },
+  { coords:[45.7627,4.8268], nom:"37 rue Saint-Jean — Maison du Chamarier", cat:"Patrimoine", type:"Cour Renaissance", adresse:"37 Rue Saint-Jean, 69005 Lyon", note:"Superbe cour gothico-Renaissance. L'une des plus belles du Vieux-Lyon." },
+];
+
+var dataEtoiles = [
+  // === 2 ÉTOILES ===
+  { coords:[45.7730,4.8393], nom:"La Mère Brazier ★★", cat:"Étoilé", adresse:"12 Rue Royale, 69001 Lyon", tel:"04 78 23 17 20", horaires:"Mar–Sam, midi et soir", note:"Institution fondée en 1921. Chef Mathieu Viannay, MOF. La poularde demi-deuil, un monument de la gastronomie lyonnaise." },
+  { coords:[45.7654,4.8485], nom:"Le Neuvième Art ★★", cat:"Étoilé", adresse:"173 Rue Cuvier, 69006 Lyon", tel:"04 72 74 12 74", horaires:"Mar–Sam, midi et soir", note:"Chef Christophe Roure, MOF. Cuisine de nature dans un cadre verdoyant et raffiné." },
+  { coords:[45.7648,4.8468], nom:"Takao Takano ★★", cat:"Étoilé", adresse:"33 Rue Malesherbes, 69006 Lyon", tel:"04 82 31 43 39", horaires:"Mar–Sam, midi et soir", note:"Cuisine française de précision japonaise. Menu unique, produits sublimés avec une maîtrise technique éblouissante." },
+  // === 1 ÉTOILE ===
+  { coords:[45.7659,4.8294], nom:"Prairial ★ 🌿", cat:"Étoilé", adresse:"14 Place Hubert Mounier, 69002 Lyon", tel:"04 78 27 86 93", horaires:"Mar–Sam, midi et soir", note:"Chef Gaëtan Gentil. Étoile verte également. Cuisine végétale de saison, produits locaux, menu surprise. Très couru." },
+  { coords:[45.7557,4.8335], nom:"Rustique ★", cat:"Étoilé", adresse:"14 Rue d'Amboise, 69002 Lyon", tel:"04 78 37 40 37", horaires:"Mar–Sam, midi et soir", note:"Chef Maxime Laurenson. Bistronomie éléégante et accessible, produits du marché." },
+  { coords:[45.7649,4.8504], nom:"Ombellule ★", cat:"Étoilé", adresse:"36 Cours Roosevelt, 69006 Lyon", tel:"04 78 37 97 40", horaires:"Mar–Sam, midi et soir", note:"Cuisine créative et personnelle dans un cadre intime de la Presqu'île." },
+  { coords:[45.7660,4.8290], nom:"L'Atelier des Augustins ★", cat:"Étoilé", adresse:"11 Rue des Augustins, 69001 Lyon", tel:"04 72 00 88 01", horaires:"Mar–Sam, midi et soir", note:"Chef Nicolas Guilloton. Nouvelle étoile 2024. Cuisine fine dans un cadre intimiste." },
+  { coords:[45.7612,4.8272], nom:"Au 14 Février ★", cat:"Étoilé", adresse:"36 Rue du Bœuf, 69005 Lyon", tel:"04 78 92 91 39", horaires:"Mar–Sam, midi et soir", note:"Chef Tsuyoshi Arai. Table franco-japonaise au cœur du Vieux-Lyon, romantique et précise." },
+  { coords:[45.7609,4.8271], nom:"Burgundy by Matthieu ★", cat:"Étoilé", adresse:"6 Rue du Bœuf, 69005 Lyon", tel:"04 78 29 40 10", horaires:"Mar–Sam, midi et soir", note:"Nouvelle étoile 2024. Rue du Bœuf, l'une des rues les plus étoilées de France !" },
+  { coords:[45.7614,4.8270], nom:"La Sommelière ★", cat:"Étoilé", adresse:"6 Rue Mourguet, 69005 Lyon", tel:"04 72 40 93 47", horaires:"Mar–Sam, midi et soir", note:"Chef Takafumi Kikuchi. Cuisine franco-japonaise raffinée au Vieux-Lyon." },
+
+  { coords:[45.7460,4.8215], nom:"Restaurant Têtedoie ★ 🌿", cat:"Étoilé", adresse:"4 Rue Pierre Marion, 69005 Lyon", tel:"04 78 29 40 10", horaires:"Mar–Sam, midi et soir", note:"Chef Christian Têtedoie. Vue panoramique sur Lyon depuis Fourvière. Étoile verte également." },
+  { coords:[45.7577,4.8266], nom:"Les Terrasses de Lyon ★", cat:"Étoilé", adresse:"25 Montée Saint-Barthélemy, 69005 Lyon", tel:"04 72 56 56 02", horaires:"Mar–Sam, midi et soir", note:"Villa Florentine. Vue imprenable sur Lyon depuis les hauteurs de Fourvière." },
+  { coords:[45.7649,4.8504], nom:"Le Gourmet de Sèze ★", cat:"Étoilé", adresse:"129 Rue de Sèze, 69006 Lyon", tel:"04 78 24 23 42", horaires:"Mar–Sam, midi et soir", note:"Chef Bernard Mariller, MOF. Grande table classique du 6e arrondissement." },
+  { coords:[45.7639,4.8493], nom:"Le Passe-Temps ★", cat:"Étoilé", adresse:"52 Rue François Dauphin, 69006 Lyon", tel:"04 72 76 79 59", horaires:"Mar–Sam, midi et soir", note:"Chef Younghoon Lee. Cuisine coréenne-française, surprenante et délicate." },
+  { coords:[45.7638,4.8477], nom:"Miraflores ★", cat:"Étoilé", adresse:"43 Rue Ney, 69006 Lyon", tel:"04 72 74 36 04", horaires:"Mar–Sam, midi et soir", note:"Chef Carlos Camino. Cuisine péruvienne-française, l'une des plus originales de Lyon." },
+  { coords:[45.7642,4.8488], nom:"La Mutinerie ★", cat:"Étoilé", adresse:"123 Rue Bugeaud, 69006 Lyon", tel:"04 72 83 08 08", horaires:"Mar–Sam, midi et soir", note:"Nouvelle étoile 2023. Cuisine végétale créative et engagée, chef Nicolas Seibold." },
+];
+
+var dataBib = [
+  { coords:[45.7661,4.8302], nom:"La Meunière 🍽️", cat:"Bib Gourmand", adresse:"11 Rue Neuve, 69001 Lyon", tel:"04 78 28 62 91", horaires:"Lun–Ven midi, Mar–Sam soir", note:"Bouchon labellisé et Bib Gourmand 2026. Chef Olivier Canal. Authentique cuisine lyonnaise, salles animées, ambiance garantie." },
+  { coords:[45.7726,4.8391], nom:"Le Cochon qui Boit 🍽️", cat:"Bib Gourmand", adresse:"23 Rue Royale, 69001 Lyon", tel:"04 78 27 44 11", horaires:"Mar–Sam, midi et soir", note:"Nouveau Bib Gourmand 2024. Anciens de chez Têtedoie. Cuisine bistronomique de saison très soignée." },
+  { coords:[45.7481,4.8348], nom:"La Virée 🍽️", cat:"Bib Gourmand", adresse:"21 Rue Jean Larrivé, 69003 Lyon", tel:"04 78 60 44 05", horaires:"Mar–Sam, midi et soir", note:"Bib Gourmand 2026. Prix meilleur bistrot 2025 du Fooding. Cuisine voyageuse et inventive." },
+  { coords:[45.7553,4.8310], nom:"Danton 🍽️", cat:"Bib Gourmand", adresse:"8 Rue Danton, 69003 Lyon", tel:"04 72 60 53 56", horaires:"Lun–Ven midi, Mar–Sam soir", note:"Bib Gourmand confirmé. Belle bistronomie de quartier, rapport qualité-prix excellent." },
+  { coords:[45.7688,4.8372], nom:"Agastache 🍽️", cat:"Bib Gourmand", adresse:"134 Rue Duguesclin, 69004 Lyon", tel:"04 78 52 23 52", horaires:"Mar–Sam, midi et soir", note:"Table créative et végétale dans les pentes de la Croix-Rousse." },
+  { coords:[45.7609,4.8272], nom:"Cinq Mains 🍽️", cat:"Bib Gourmand", adresse:"12 Rue Mgr Lavarenne, 69005 Lyon", tel:"04 78 29 27 13", horaires:"Mar–Sam, midi et soir", note:"Bib Gourmand 2026. Frères Cuilleron. Dans le Vieux-Lyon, cuisine lyonnaise revisitée avec talent." },
+  { coords:[45.7644,4.8496], nom:"Le Jean Moulin 🍽️", cat:"Bib Gourmand", adresse:"45 Rue de Sèze, 69006 Lyon", tel:"04 78 37 37 97", horaires:"Lun–Ven midi et soir", note:"Valeur sûre du 6e. Cuisine de marché généreuse, rapport qualité-prix remarquable." },
+  { coords:[45.7648,4.8500], nom:"Le Zeste Gourmand 🍽️", cat:"Bib Gourmand", adresse:"93 Rue Bossuet, 69006 Lyon", tel:"04 78 52 17 63", horaires:"Mar–Sam midi", note:"Un classique du Bib Gourmand lyonnais, cuisine soignée et accessible." },
+  { coords:[45.7646,4.8495], nom:"M Restaurant 🍽️", cat:"Bib Gourmand", adresse:"47 Avenue du Maréchal Foch, 69006 Lyon", tel:"04 78 89 55 19", horaires:"Lun–Ven midi, Mar–Sam soir", note:"Bib Gourmand depuis 15 ans. Entre bistrot et gastronomie, une valeur sûre du 6e." },
+  { coords:[45.7651,4.8491], nom:"Sauf Imprévu 🍽️", cat:"Bib Gourmand", adresse:"40 Rue Pierre Corneille, 69006 Lyon", tel:"04 72 61 99 47", horaires:"Lun–Ven midi", note:"Cuisine du marché, fraîche et inventive. Formule déjeuner imbattable." },
+  { coords:[45.7349,4.8292], nom:"Accentué 🍽️", cat:"Bib Gourmand", adresse:"97 Rue de Gerland, 69007 Lyon", tel:"04 78 72 23 66", horaires:"Mar–Sam midi et soir", note:"Bib Gourmand 2026. Cuisine épicée aux influences indiennes, asiatiques et africaines. Voyage assuré." },
+  { coords:[45.7345,4.8283], nom:"Bergamote 🍽️", cat:"Bib Gourmand", adresse:"123 Rue de Gerland, 69007 Lyon", tel:"04 78 69 69 22", horaires:"Mar–Sam midi et soir", note:"Bistronomie de saison dans le quartier de Gerland." },
+  { coords:[45.7351,4.8265], nom:"Le Kitchen 🍽️", cat:"Bib Gourmand", adresse:"34 Rue Chevreul, 69007 Lyon", tel:"04 78 72 23 12", horaires:"Mar–Sam midi et soir", note:"Cuisine ouverte sur salle, plats du marché, ambiance décontractée et chaleureuse." },
+  { coords:[45.7348,4.8280], nom:"Siprès 🍽️", cat:"Bib Gourmand", adresse:"2 Place du Prado, 69007 Lyon", tel:"04 37 42 99 42", horaires:"Mar–Sam midi et soir", note:"Nouveau Bib Gourmand 2024. Pâté en croûte remarquable. Alliance cuisine & pâtisserie, deux chefs complémentaires." },
+  { coords:[45.7345,4.8278], nom:"Veronatuti 🍽️", cat:"Bib Gourmand", adresse:"122 Rue Montesquieu, 69007 Lyon", tel:"04 78 61 35 38", horaires:"Mar–Sam midi et soir", note:"Cuisine italienne authentique et généreuse, dans le 7e arrondissement." },
+];
+
+var dataBouchons = [
+  { coords:[45.7668,4.8344], nom:"Aux Trois Maries 🍷", cat:"Bouchon", adresse:"1 Rue des Trois Maries, 69005 Lyon", tel:"04 78 92 79 44", horaires:"Lun–Sam, midi et soir", note:"L'un des bouchons les plus authentiques du Vieux-Lyon. Ambiance chaleureuse, tablier de sapeur et cochonnailles." },
+  { coords:[45.7619,4.8268], nom:"Daniel et Denise Saint-Jean 🍷", cat:"Bouchon", adresse:"36 Rue Tramassac, 69005 Lyon", tel:"04 78 92 79 44", horaires:"Mar–Sam midi et soir (fermé dim-lun)", note:"Chef Joseph Viola, MOF. La maison du pâté en croûte. Bouchon étoilé dans l'esprit, sans en avoir le prix. Incontournable." },
+  { coords:[45.7617,4.8267], nom:"Le Cabaretier 🍷", cat:"Bouchon", adresse:"6 Rue de la Fronde, 69005 Lyon", tel:"04 78 37 02 85", horaires:"Mar–Sam, midi et soir", note:"Bouchon labellisé du Vieux-Lyon. Cuisine lyonnaise traditionnelle, cadre pittoresque dans une ruelle pavée." },
+  { coords:[45.7621,4.8264], nom:"Les Fines Gueules 🍷", cat:"Bouchon", adresse:"6 Rue Confort, 69001 Lyon", tel:"04 78 28 59 16", horaires:"Lun–Sam, midi et soir", note:"Bouchon convivial et animé, carte classique lyonnaise, belle sélection de vins du Beaujolais." },
+  { coords:[45.7661,4.8302], nom:"La Meunière 🍷", cat:"Bouchon", adresse:"11 Rue Neuve, 69001 Lyon", tel:"04 78 28 62 91", horaires:"Lun–Ven midi, Mar–Sam soir", note:"Bouchon labellisé et Bib Gourmand. L'un des plus anciens de Lyon. Salle animée, cuisine généreuse et authentique." },
+  { coords:[45.7667,4.8310], nom:"Le Garet 🍷", cat:"Bouchon", adresse:"7 Rue du Garet, 69001 Lyon", tel:"04 78 28 16 94", horaires:"Lun–Ven midi, Mar–Sam soir", note:"Institution lyonnaise depuis des décennies. Quenelles, andouillette, salade lyonnaise… La tradition à l'état pur." },
+  { coords:[45.7665,4.8318], nom:"Chez Hugon 🍷", cat:"Bouchon", adresse:"12 Rue Pizay, 69001 Lyon", tel:"04 78 28 10 94", horaires:"Lun–Ven midi et soir (fermé sam-dim)", note:"Le bouchon préféré des Lyonnais. Mme Hugon en salle, atmosphère unique. Réservation indispensable." },
+  { coords:[45.7663,4.8312], nom:"Le Café des Fédérations 🍷", cat:"Bouchon", adresse:"8 Rue Major Martin, 69001 Lyon", tel:"04 78 28 26 00", horaires:"Lun–Sam, midi et soir", note:"Bouchon labellisé emblématique. Nappes à carreaux, pots de Beaujolais, ambiance lyonnaise garantie. Menu unique traditionnel." },
+  { coords:[45.7555,4.8295], nom:"Café Comptoir Abel 🍷", cat:"Bouchon", adresse:"25 Rue Guynemer, 69002 Lyon", tel:"04 78 37 46 18", horaires:"Lun–Sam, midi et soir", note:"Le plus ancien bouchon de Lyon, ouvert depuis 1928. Décor d'époque intact, cuisine lyonnaise généreuse et sans chichi." },
+];
+
+var dataBocuse = [
+  { coords:[45.8109,4.8283], nom:"Auberge du Pont de Collonges ★★ 👨‍🍳", cat:"Bocuse", adresse:"40 Rue de la Plage, 69660 Collonges-au-Mont-d'Or", tel:"04 72 42 90 90", horaires:"Ouvert 7j/7, midi et soir", note:"La maison mère, le sanctuaire de Paul Bocuse. 2 étoiles Michelin. La soupe VGE aux truffes, la rouget en écailles de pommes de terre… Un pèlerinage gastronomique." },
+  { coords:[45.7680,4.8355], nom:"Brasserie Le Nord 👨‍🍳", cat:"Bocuse", adresse:"18 Rue Neuve, 69002 Lyon", tel:"04 72 10 69 69", horaires:"Ouvert 7j/7, midi et soir", note:"La première brasserie Bocuse (1994). Cuisine brasserie classique française, cadre Belle Époque élégant. Ouvert tous les jours." },
+  { coords:[45.7565,4.8308], nom:"Brasserie Le Sud 👨‍🍳", cat:"Bocuse", adresse:"11 Place Antonin Poncet, 69002 Lyon", tel:"04 72 77 80 00", horaires:"Ouvert 7j/7, midi et soir", note:"Saveurs du Sud, de la Méditerranée et du Maghreb. Terrasse sur la belle place Antonin Poncet. Ambiance ensoleillée." },
+  { coords:[45.7545,4.8155], nom:"Brasserie L'Ouest 👨‍🍳", cat:"Bocuse", adresse:"1 Quai du Commerce, 69009 Lyon", tel:"04 37 64 64 64", horaires:"Ouvert 7j/7, midi et soir", note:"Sur les quais de Saône, côté Vaise. Cuisine de la mer et de l'Atlantique. Beau cadre industriel chic." },
+  { coords:[45.7489,4.8460], nom:"Brasserie L'Est 👨‍🍳", cat:"Bocuse", adresse:"14 Place Jules Ferry, 69006 Lyon", tel:"04 37 72 75 75", horaires:"Ouvert 7j/7, midi et soir", note:"Dans la grande halle de la Gare des Brotteaux (classée). Cuisine à l'influence orientale. Cadre architectural époustouflant." },
+  { coords:[45.7385,4.8318], nom:"Brasserie des Lumières 👨‍🍳", cat:"Bocuse", adresse:"10 Rue Simone Veil, Groupama Stadium, 69150 Décines", tel:"04 81 91 01 01", horaires:"Ouvert selon matchs et événements", note:"Dans le Groupama Stadium. Grande brasserie lyonnaise dans un cadre unique. À réserver pour les soirs de match !" },
+  { coords:[45.7565,4.8500], nom:"Restaurant Marguerite 👨‍🍳", cat:"Bocuse", adresse:"57 Avenue des Frères Lumière, 69008 Lyon", tel:"04 78 00 60 60", horaires:"Ouvert 7j/7, midi et soir", note:"Restaurant gastronomique dans le 8e. Terrasse privée, cadre raffiné et intime. Cuisine traditionnelle française soignée." },
+  { coords:[45.7920,4.8400], nom:"Restaurant Fond Rose 👨‍🍳", cat:"Bocuse", adresse:"25 Chemin de Fond Rose, 69300 Caluire-et-Cuire", tel:"04 78 29 34 61", horaires:"Mar–Dim, midi et soir", note:"Ancien cabanon de pêcheurs sur les bords de Saône. Jardin magnifique, terrasse ombragée. Cuisine de tradition lyonnaise." },
+];
+
+var dataHalles = [
+  { coords:[45.7632,4.8432], nom:"Les Halles de Lyon Paul Bocuse 🔵", cat:"Bocuse", adresse:"102 Cours Lafayette, 69003 Lyon", tel:"04 78 62 39 33", horaires:"Mar–Jeu 7h30–19h, Ven–Sam 7h30–19h30, Dim 7h30–13h30", note:"La cathédrale de la gastronomie lyonnaise ! 50 artisans d'excellence : Mère Richard, Bobosse, Reynon… Un passage obligatoire." },
+];
+
+// =====================
+// LAYERS & MARKERS
+// =====================
+var layers = {
+  culture: L.layerGroup(),
+  patrimoine: L.layerGroup(),
+  etoiles: L.layerGroup(),
+  restaurants: L.layerGroup(),
+  halles: L.layerGroup(),
+  transports: L.layerGroup()
+};
+
+Object.values(layers).forEach(function(l) { l.addTo(map); });
+
+// =====================
+// GEOCODAGE AUTOMATIQUE
+// =====================
+// Indicateur de chargement
+var loadingDiv = document.createElement('div');
+loadingDiv.id = 'loading';
+loadingDiv.style.cssText = 'position:fixed;top:108px;left:50%;transform:translateX(-50%);z-index:2000;background:white;padding:10px 20px;border-radius:20px;box-shadow:0 4px 16px rgba(0,0,0,0.15);font-family:"DM Sans",sans-serif;font-size:13px;color:#0f1f3d;display:flex;align-items:center;gap:8px;';
+loadingDiv.innerHTML = '<div style="width:14px;height:14px;border:2px solid #e8edf5;border-top-color:#1a56a0;border-radius:50%;animation:spin 0.8s linear infinite"></div> Chargement des lieux…';
+document.body.appendChild(loadingDiv);
+
+var style = document.createElement('style');
+style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+document.head.appendChild(style);
+
+// File d'attente pour respecter les limites Nominatim (1 req/sec)
+var geocodeQueue = [];
+var geocodeTotal = 0;
+var geocodeDone = 0;
+
+var allSets = [
+  { data: dataCulture,    layer: layers.culture,      icon: iconCulture },
+  { data: dataPatrimoine, layer: layers.patrimoine,    icon: iconPatrimoine },
+  { data: dataEtoiles,    layer: layers.etoiles,       icon: iconEtoiles },
+  { data: dataBib,        layer: layers.restaurants,   icon: iconRestaurants },
+  { data: dataBouchons,   layer: layers.restaurants,   icon: iconRestaurants },
+  { data: dataBocuse,     layer: layers.restaurants,   icon: iconRestaurants },
+  { data: dataHalles,     layer: layers.halles,        icon: iconHalles },
+];
+
+// Les transports ont une icône par station — traitement séparé
+dataTransports.forEach(function(o) {
+  L.marker(o.coords, { icon: o.icone }).bindPopup(buildPopup(o), {maxWidth:260}).addTo(layers.transports);
+});
+layers.transports.addTo(map);
+
+allSets.forEach(function(set) {
+  set.data.forEach(function(o) {
+    geocodeQueue.push({ o: o, layer: set.layer, icon: set.icon });
+  });
+});
+
+geocodeTotal = geocodeQueue.length;
+
+function processNext() {
+  if (geocodeQueue.length === 0) {
+    loadingDiv.remove();
+    return;
+  }
+
+  var item = geocodeQueue.shift();
+  var o = item.o;
+  var adresse = o.adresse || '';
+
+  // Si pas d'adresse, utiliser les coords existantes directement
+  if (!adresse) {
+    if (o.coords) {
+      L.marker(o.coords, { icon: item.icon }).bindPopup(buildPopup(o), {maxWidth:280}).addTo(item.layer);
+    }
+    geocodeDone++;
+    updateLoading();
+    setTimeout(processNext, 0);
+    return;
+  }
+
+  var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(adresse);
+
+  fetch(url, { headers: { 'Accept-Language': 'fr', 'User-Agent': 'LyonConciergeApp/2.0' } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.length > 0) {
+        var lat = parseFloat(data[0].lat);
+        var lon = parseFloat(data[0].lon);
+        L.marker([lat, lon], { icon: item.icon }).bindPopup(buildPopup(o), {maxWidth:280}).addTo(item.layer);
+      } else if (o.coords) {
+        // Fallback sur les coords existantes si géocodage échoue
+        L.marker(o.coords, { icon: item.icon }).bindPopup(buildPopup(o), {maxWidth:280}).addTo(item.layer);
+      }
+    })
+    .catch(function() {
+      if (o.coords) {
+        L.marker(o.coords, { icon: item.icon }).bindPopup(buildPopup(o), {maxWidth:280}).addTo(item.layer);
+      }
+    })
+    .finally(function() {
+      geocodeDone++;
+      updateLoading();
+      setTimeout(processNext, 1100); // 1.1 sec entre chaque requête
+    });
+}
+
+function updateLoading() {
+  var pct = Math.round((geocodeDone / geocodeTotal) * 100);
+  if (loadingDiv.parentNode) {
+    loadingDiv.innerHTML = '<div style="width:14px;height:14px;border:2px solid #e8edf5;border-top-color:#1a56a0;border-radius:50%;animation:spin 0.8s linear infinite"></div> Chargement des lieux… ' + geocodeDone + '/' + geocodeTotal;
+  }
+}
+
+// Lancer la file avec un léger délai
+setTimeout(processNext, 500);
+
+// =====================
+// FILTRES
+// =====================
+var activeFilters = new Set(['tous']);
+
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var cat = btn.dataset.cat;
+
+    if (cat === 'tous') {
+      activeFilters = new Set(['tous']);
+      document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      Object.values(layers).forEach(function(l) { l.addTo(map); });
+      return;
+    }
+
+    document.querySelector('[data-cat="tous"]').classList.remove('active');
+    activeFilters.delete('tous');
+
+    if (btn.classList.contains('active')) {
+      btn.classList.remove('active');
+      activeFilters.delete(cat);
+      if (layers[cat]) map.removeLayer(layers[cat]);
+    } else {
+      btn.classList.add('active');
+      activeFilters.add(cat);
+      if (layers[cat]) layers[cat].addTo(map);
+    }
+
+    if (activeFilters.size === 0) {
+      document.querySelector('[data-cat="tous"]').click();
+    }
+  });
+});
+
+// =====================
+// GÉOLOCALISATION
+// =====================
+var myLocationMarker = null;
+
+function geolocate() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var latlng = [pos.coords.latitude, pos.coords.longitude];
+    if (myLocationMarker) map.removeLayer(myLocationMarker);
+    myLocationMarker = L.marker(latlng, {
+      icon: L.divIcon({
+        className: '',
+        html: '<div class="my-location-marker"></div>',
+        iconSize: [18,18], iconAnchor: [9,9]
+      })
+    }).addTo(map).bindPopup('<b>📍 Vous êtes ici</b>').openPopup();
+    map.setView(latlng, 15);
+  }, function() {
+    map.setView([45.75914, 4.82306], 14);
+  });
+}
+
+document.getElementById('geoBtn').addEventListener('click', geolocate);
+
+// Init : centrer sur Lyon, puis tenter géoloc
+map.setView([45.7600, 4.8300], 14);
+geolocate();
+
+</script>
+</body>
+</html>
